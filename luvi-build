@@ -1,0 +1,181 @@
+#!/usr/bin/env sh
+# This file is part of luvi. It is subject to the licence terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi/master/COPYRIGHT. No part of luvi, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
+# Copyright © 2015 The developers of luvi. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi/master/COPYRIGHT.
+
+
+_program()
+{
+	core_usesIn luvi
+	core_usesIn luvi validate
+    main()
+    {
+		luvi_findOurPath
+		luvi_findExecutable
+		luvi_unsetInheritatedEnvironmentVariables
+		luvi_populateAllApplicationsIfNoneSupplied
+		luvi_createOutputPathIfBuilding
+		luvi_processApplications
+    }
+}
+
+_program_name='luvi'
+_program_version='unversioned'
+_program_package_or_build=''
+_program_path="$([ "${_program_fattening_program_path+set}" = 'set' ] && printf '%s\n' "$_program_fattening_program_path" || ([ "${0%/*}" = "${0}" ] && printf '%s\n' '.' || printf '%s\n' "${0%/*}"))"
+_program_libPath="${_program_path}/lib"
+_program_etcPath="${_program_path}/etc"
+_program_varPath="${_program_path}/var"
+_program_entrypoint='main'
+
+
+_program_commandLine_parseInitialise()
+{
+	luvi_applicationsPath_default="$(pwd)"/applications
+	luvi_outputPath_default="$(pwd)"/release
+	luvi_run_default='compile'
+}
+
+_program_commandLine_helpMessage()
+{
+	_program_commandLine_helpMessage_usage="[OPTION]... -- [APPLICATIONs]..."
+	_program_commandLine_helpMessage_description="Parses *.package.json files to create concatenated JavaScript"
+	_program_commandLine_helpMessage_options="
+  -a, --applications-path PATH  PATH to applications folder.
+                                Defaults to '$luvi_applicationsPath_default'.
+  -o, --output-path PATH        PATH to folder of output.
+                                Defaults to '$luvi_outputPath_default'.
+  -l, --copyright-file PATH     PATH to copyright file.
+                                Defaults to '--applications-path ../COPYRIGHT', currently:-
+                                '$luvi_applicationsPath_default/../COPYRIGHT'.
+  -f, --force                   Force overwriting of output.
+  -r, --run [RUN]               Runs APPLICATION. Specify RUN as 'unbuilt', 'compile' or 
+                                'built'. Only 'compile' works with more than one APPLICATION.
+                                Defaults to '$luvi_run_default'. Without an argument
+								defaults to 'unbuilt'.
+                                Use -- to separate from APPLICATION"
+    _program_commandLine_helpMessage_optionsSpacing='   '
+	_program_commandLine_helpMessage_configurationKeys="
+  luvi_applicationsPath  Equivalent to --application-path
+  luvi_outputPath       Equivalent to --output-path
+  luvi_copyrightFile    Equivalent to --copyright-file
+"
+	_program_commandLine_helpMessage_examples="
+  ${_program_name}
+"
+}
+
+_program_commandLine_optionExists()
+{
+	case "$optionName" in
+		
+		m|applications-path)
+			echo 'yes-argumented'
+		;;
+		
+		o|output-path)
+			echo 'yes-argumented'
+		;;
+		
+		l|copyright-file)
+			echo 'yes-argumented'
+		;;
+		
+        f|force)
+            echo 'yes-argumentless'
+        ;;
+		
+		r|run)
+			echo 'yes--optionally-argumented'
+		;;
+		
+		*)
+			echo 'no'
+		;;
+		
+	esac
+}
+
+_program_commandLine_processOptionWithoutArgument()
+{
+	case "$optionName" in
+		
+		f|force)
+			luvi_force='yes'
+		;;
+		
+		r|run)
+			luvi_run='unbuilt'
+		;;
+		
+	esac
+}
+
+_program_commandLine_processOptionWithArgument()
+{
+	case "$optionName" in
+		
+		a|applications-path)
+			core_validate_folderPathReadableAndSearchableAndWritable $core_commandLine_exitCode_USAGE 'option' "$optionNameIncludingHyphens" "$optionValue"
+			luvi_applicationsPath="$optionValue"
+		;;
+		
+		o|output-path)
+			core_validate_folderPathIsReadableAndSearchableAndWritableOrCanBeCreated $core_commandLine_exitCode_USAGE 'option' "$optionNameIncludingHyphens" "$optionValue"
+			luvi_outputPath="$optionValue"
+		;;
+		
+		l|copyright-file)
+			core_validate_filePathReadable $core_commandLine_exitCode_USAGE 'option' "$optionNameIncludingHyphens" "$optionValue"
+			luvi_copyrightFile="$optionValue"
+		;;
+		
+		r|run)
+			luvi_validate_run $core_commandLine_exitCode_USAGE 'option' "$optionNameIncludingHyphens" "$optionValue"
+			luvi_run="$optionValue"
+		;;
+		
+	esac
+}
+
+_program_commandLine_handleNonOptions()
+{
+	core_variable_array_initialise luvi_applications
+	core_variable_array_append luvi_applications "$@"
+}
+
+_program_commandLine_validate()
+{
+	if core_variable_isUnset luvi_applicationsPath; then
+		luvi_applicationsPath="$luvi_applicationsPath_default"
+	else
+		core_validate_folderPathReadableAndSearchableAndWritable $core_commandLine_exitCode_CONFIG 'configuration setting' 'luvi_applicationsPath' "$luvi_applicationsPath"
+	fi
+
+	if core_variable_isUnset luvi_outputPath; then
+		luvi_outputPath="$luvi_outputPath_default"
+	else
+		core_validate_folderPathIsReadableAndSearchableAndWritableOrCanBeCreated $core_commandLine_exitCode_CONFIG 'configuration setting' 'luvi_outputPath' "$luvi_outputPath"
+	fi
+
+	if core_variable_isUnset luvi_copyrightFile; then
+		luvi_copyrightFile="$luvi_applicationsPath"/../COPYRIGHT
+		core_validate_filePathReadable $core_commandLine_exitCode_CONFIG 'default' '--copyright-file' "$luvi_copyrightFile"
+	else
+		core_validate_filePathReadable $core_commandLine_exitCode_CONFIG 'configuration setting' 'luvi_outputPath' "$luvi_outputPath"
+	fi
+
+    if core_variable_isSet luvi_force; then
+        core_validate_isBoolean $core_commandLine_exitCode_CONFIG 'configuration setting' 'luvi_force' "$luvi_force"
+    else
+        luvi_force='no'
+    fi
+
+    if core_variable_isSet luvi_run; then
+        luvi_validate_run $core_commandLine_exitCode_CONFIG 'configuration setting' 'luvi_run' "$luvi_run"
+    else
+        luvi_run="$luvi_run_default"
+    fi
+}
+
+# Assumes pwd, and so requires this code to be running from this folder
+. "$_program_libPath"/shellfire/core/init.functions "$@"

@@ -1,0 +1,93 @@
+# This file is part of luvi. It is subject to the licence terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi/master/COPYRIGHT. No part of luvi, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
+# Copyright © 2015 The developers of luvi. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi/master/COPYRIGHT.
+
+
+luvi_findOurPath()
+{
+	luvi_ourPath="$(pwd -P)"
+}
+
+core_dependency_requires '*' uname chmod
+luvi_findExecutable()
+{
+	if core_compatibility_whichNoOutput luvi; then
+		luvi_executable="$(core_compatibility_which luvi)"
+		return 0
+	fi
+
+	local variant='static'
+	local operatingSystem="$(uname)"
+	local machineHardware="$(uname -m)"
+	local luviName=luvi-"$variant"-"$operatingSystem"_"$machineHardware"
+	
+	local luviExecutableParentPath="$luvi_ourPath"/lib/luvi/current
+	if ! core_path_isReadableAndSearchableFolderPath "$luviExecutableParentPath"; then
+		core_exitError $core_commandLine_exitCode_OSFILE "Could not find required luvi executable on the PATH or in parent folder '$luviExecutableParentPath'"
+	fi
+	
+	pushd "$luviExecutableParentPath"
+	
+		local absoluteLuviExecutableParentPath="$(pwd -P)"
+	
+	popd
+	
+	luvi_executable="$absoluteLuviExecutableParentPath"/"$luviName"
+	if [ ! -f "$luvi_executable" ]; then
+		core_exitError $core_commandLine_exitCode_OSFILE "Could not find required luvi executable on the PATH or at '$luvi_executable'"
+	fi
+	if [ ! -x "$luvi_executable" ]; then
+		chmod +x "$luvi_executable" 2>/dev/null || true
+	fi
+}
+
+
+luvi_unsetInheritatedEnvironmentVariables()
+{
+	core_variable_unset LUVI_APP
+	core_variable_unset LUVI_MAIN
+	core_variable_unset LUVI_TARGET
+}
+
+luvi_populateAllApplicationsIfNoneSupplied()
+{
+	if ! core_variable_array_isEmpty luvi_applications; then
+		return 0
+	fi
+	
+	local application
+	pushd "$luvi_applicationsPath"
+	
+		set +f
+		for application in *
+		do
+			set -f
+			if [ -d "$application" ]; then
+				if [ -s "$application"/main.lua ]; then
+					core_variable_array_append luvi_applications "$application"
+				fi
+			fi
+		done
+		set -f
+	popd
+}
+
+core_dependency_requires '*' mkdir
+luvi_createOutputPathIfBuilding()
+{
+	case "$luvi_run" in
+		
+		compile|built)
+			mkdir -m 0755 -p "$luvi_outputPath"
+		;;
+		
+	esac
+}
+
+core_usesIn luvi validate
+core_usesIn luvi application
+luvi_processApplications()
+{
+	luvi_validate_applicationCanBeBuilt
+	
+	core_variable_array_iterate luvi_applications luvi_application_process
+}
