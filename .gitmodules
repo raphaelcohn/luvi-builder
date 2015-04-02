@@ -4,12 +4,12 @@
 [submodule "lib/shellfire/core"]
 	path = lib/shellfire/core
 	url = https://github.com/shellfire-dev/core
-[submodule "lib/shellfire/jsonreader"]
-	path = lib/shellfire/jsonreader
-	url = https://github.com/shellfire-dev/jsonreader
-[submodule "lib/shellfire/unicode"]
-	path = lib/shellfire/unicode
-	url = https://github.com/shellfire-dev/unicode
-[submodule "lib/shellfire/xmlwriter"]
-	path = lib/shellfire/xmlwriter
-	url = https://github.com/shellfire-dev/xmlwriter
+[submodule "lib/shellfire/curl"]
+	path = lib/shellfire/curl
+	url = https://github.com/shellfire-dev/curl.git
+[submodule "lib/shellfire/version"]
+	path = lib/shellfire/version
+	url = https://github.com/shellfire-dev/version.git
+[submodule "lib/shellfire/urlencode"]
+	path = lib/shellfire/urlencode
+	url = https://github.com/shellfire-dev/urlencode.git

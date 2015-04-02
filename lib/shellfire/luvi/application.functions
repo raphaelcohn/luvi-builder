@@ -1,66 +1,132 @@
-# This file is part of luvi. It is subject to the licence terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi/master/COPYRIGHT. No part of luvi, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
-# Copyright © 2015 The developers of luvi. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi/master/COPYRIGHT.
+# This file is part of luvi-builder. It is subject to the licence terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi-builder/master/COPYRIGHT. No part of luvi-builder, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
+# Copyright © 2015 The developers of luvi-builder. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi-builder/master/COPYRIGHT.
 
 
-luvi_application_process()
+luvi_application_run()
 {
-	luvi_application_setVariableNames
-	luvi_application_validate
+	luvi_application_setAndValidateVariables "$luvi_run" 'option' '--run'
 	
-	luvi_application_${luvi_run}
+	if [ -z "$luvi_main" ]; then
+		luvi_actualMain='main.lua'
+	else
+		luvi_actualMain=main/"$luvi_main".lua
+	fi
+	
+	local mainLuaFilePath="$luvi_application_path"/"$luvi_actualMain"
+	if ! core_path_isReadableFilePath "$mainLuaFilePath"; then
+		if [ -z "$luvi_main"  ]; then
+			local code=$core_commandLine_exitCode_DATAERR
+			core_validate_exit "The $luvi_application_optionCategory '$luvi_application_optionName' specifies an application '$luvi_run' which does not have a main.lua. Consider using --main to define a main/xxx.lua"
+		fi
+		local code=$core_commandLine_exitCode_USAGE
+		core_validate_exit "The $luvi_application_optionCategory '--main' specifies a main '$luvi_main' which does not exist at 'main/$luvi_main.lua' for the application '$luvi_run'"
+	fi
+	
+	_luvi_application_run_callback()
+	{	
+		pushd "$luvi_applicationsPath"
+			
+			LUVI_APP="$luvi_application_name" LUVI_MAIN="$luvi_main" "$luvi_executable" "$@"
+			
+		popd
+	}
+	
+	core_variable_array_passToFunctionAsArguments luvi_nonOptions _luvi_application_run_callback
 }
 
-luvi_application_setVariableNames()
+luvi_application_build()
 {
-	luvi_application_name="$core_variable_array_element"
+	luvi_application_setAndValidateVariables "$core_variable_array_element" 'non-options' 'APPLICATIONs'	
+
+	local luvi_application_mains
+	local luvi_application_mains_initialised
+	core_variable_array_initialise luvi_application_mains
+	
+	luvi_application_mainPath="$luvi_application_path"/main
+	# Iterate over all entries in main/x.lua and then main.lua to generate the built applications
+	if core_path_isReadableAndSearchableFolderPath "$luvi_application_mainPath"; then
+		
+		pushd "$luvi_application_mainPath"
+	
+			local luaMainFile
+			local extension='.lua'
+			local luaMainName
+			set +f
+			for luaMainFile in *.lua
+			do
+				set -f
+				if core_path_isReadableNonEmptyFilePath "$luaMainFile"; then
+					luaMainName="$(core_variable_allButLastN "$luaMainFile" ${#extension})"
+					core_variable_array_append luvi_application_mains "$luaMainName"
+				fi
+			done
+			set -f
+		
+		popd
+	else
+		# nothing in main/, therefore main.lua must exist (we don't support LUVI_MAIN anymore)
+		if ! core_path_isReadableFilePath "$luvi_application_path"/main.lua; then
+			local code=$core_commandLine_exitCode_USAGE
+			core_validate_exit "The $category '$luvi_application_optionCategory' has an application '$luvi_application_name' with no main/*.lua or main.lua"
+		fi
+	fi
+	
+	core_variable_array_iterate luvi_application_mains luvi_application_buildVariant
+
+	# build the main.lua variant ONLY if main/"$luvi_application_name".lua doesn't exist and main.lua does
+	if ! core_variable_array_contains luvi_application_mains "$luvi_application_name"; then
+		if core_path_isReadableFilePath "$luvi_application_path"/main.lua; then
+			local core_variable_array_element="$luvi_application_name"
+			luvi_application_buildVariant
+		fi
+	fi
+}
+
+luvi_application_setAndValidateVariables()
+{
+	luvi_application_name="$1"
+	luvi_application_optionCategory="$2"
+	luvi_application_optionName="$3"
+	
 	luvi_application_path="$luvi_applicationsPath"/"$luvi_application_name"
-	luvi_application_main="$luvi_application_path"/main.lua
-	luvi_application_targetFilePath="$luvi_outputPath"/"$luvi_application_name"
+	core_validate_folderPathReadableAndSearchable "$core_commandLine_exitCode_USAGE" "$luvi_application_optionCategory" "$luvi_application_optionName" "$luvi_application_path"
 }
 
-luvi_application_validate()
+core_dependency_requires '*' mkdir
+luvi_application_buildVariant()
 {
-	core_validate_folderPathReadableAndSearchable "$core_commandLine_exitCode_USAGE" "non-option" "applications" "$luvi_application_path"
-	core_validate_filePathReadable "$core_commandLine_exitCode_USAGE" "non-option" "applications" "$luvi_application_main"
-}
-
-luvi_application_unbuilt()
-{
+	local variantName="$core_variable_array_element"
+	
+	luvi_compilationOutputPath="$luvi_outputPath"/"$luvi_application_name"/"$luvi_operatingSystem"/"$luvi_machineHardware"/"$luvi_flavor"
+	mkdir -m 0755 -p "$luvi_compilationOutputPath"
+	
+	luvi_application_targetFilePath="$luvi_compilationOutputPath"/"$variantName""${luvi_fileExtension}"
+	
+	luvi_application_checkIfCanOverwrite "$luvi_application_targetFilePath"
+	
 	pushd "$luvi_applicationsPath"
-	
-		LUVI_APP="$luvi_application_name" "$luvi_executable"
-	
+		
+		if [ "$(core_init_verbosity)" -gt 0 ]; then
+			LUVI_APP="$luvi_application_name" LUVI_TARGET="$luvi_application_targetFilePath" "$luvi_executable" 1>&2
+		else
+			LUVI_APP="$luvi_application_name" LUVI_TARGET="$luvi_application_targetFilePath" "$luvi_executable" 1>/dev/null
+		fi
+
 	popd
-}
-
-luvi_application_compile()
-{
-	luvi_application_checkIfCanOverwrite
-
-	pushd "$luvi_applicationsPath"
-	
-		LUVI_APP="$luvi_executable" LUVI_TARGET="$luvi_application_targetFilePath" "$luvi_executable"
-	
-	popd
-}
-
-luvi_application_built()
-{
-	luvi_application_compile
-	
-	"$luvi_application_targetFilePath"
 }
 
 core_dependency_requires '*' rm
 luvi_application_checkIfCanOverwrite()
 {
-	if [ ! -e "$luvi_application_targetFilePath" ]; then
+	local path="$1"
+	
+	if [ ! -e "$path" ]; then
 		return
 	fi
 	
 	if core_variable_isTrue "$luvi_force"; then
-		rm -rf "$luvi_application_targetFilePath"
+		rm -rf "$path"
 	else
-		core_exitError $core_commandLine_exitCode_CANTCREAT "Can not overwrite existing file '$luvi_application_targetFilePath'; please specify --force to do so"
+		core_exitError $core_commandLine_exitCode_CANTCREAT "Can not overwrite existing folder/file '$path'; please specify --force to do so"
 	fi
 }

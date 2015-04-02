@@ -1,20 +1,14 @@
 #!/usr/bin/env sh
-# This file is part of luvi. It is subject to the licence terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi/master/COPYRIGHT. No part of luvi, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
-# Copyright © 2015 The developers of luvi. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi/master/COPYRIGHT.
+# This file is part of luvi-builder. It is subject to the licence terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi-builder-builder/master/COPYRIGHT. No part of luvi-builder, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
+# Copyright © 2015 The developers of luvi-builder. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi-builder-builder/master/COPYRIGHT.
 
 
 _program()
 {
 	core_usesIn luvi
-	core_usesIn luvi validate
     main()
     {
-		luvi_findOurPath
-		luvi_findExecutable
-		luvi_unsetInheritatedEnvironmentVariables
-		luvi_populateAllApplicationsIfNoneSupplied
-		luvi_createOutputPathIfBuilding
-		luvi_processApplications
+		luvi_main
     }
 }
 
@@ -27,17 +21,18 @@ _program_etcPath="${_program_path}/etc"
 _program_varPath="${_program_path}/var"
 _program_entrypoint='main'
 
-
 _program_commandLine_parseInitialise()
 {
 	luvi_applicationsPath_default="$(pwd)"/applications
 	luvi_outputPath_default="$(pwd)"/release
-	luvi_run_default='compile'
+	luvi_main_default=''
 }
 
 _program_commandLine_helpMessage()
 {
-	_program_commandLine_helpMessage_usage="[OPTION]... -- [APPLICATIONs]..."
+	_program_commandLine_helpMessage_usage="[OPTION]... -- [APPLICATIONs]...
+[OPTION] --run APPLICATION -- [APPLICATION ARGUMENTS]
+"
 	_program_commandLine_helpMessage_description="Parses *.package.json files to create concatenated JavaScript"
 	_program_commandLine_helpMessage_options="
   -a, --applications-path PATH  PATH to applications folder.
@@ -48,19 +43,19 @@ _program_commandLine_helpMessage()
                                 Defaults to '--applications-path ../COPYRIGHT', currently:-
                                 '$luvi_applicationsPath_default/../COPYRIGHT'.
   -f, --force                   Force overwriting of output.
-  -r, --run [RUN]               Runs APPLICATION. Specify RUN as 'unbuilt', 'compile' or 
-                                'built'. Only 'compile' works with more than one APPLICATION.
-                                Defaults to '$luvi_run_default'. Without an argument
-								defaults to 'unbuilt'.
-                                Use -- to separate from APPLICATION"
+  -r, --run APPLICATION         Runs APPLICATION. Non-options are interpreted as ARGUMENTS
+                                to pass to APPLICATION.
+  -m, --main MAIN               MAIN in --applications-path/APPLICATION/MAIN.lua
+                                Ignored if --run not specified (main.lua used instead).
+If APPLICATIONs are unspecified, all applications are used"
     _program_commandLine_helpMessage_optionsSpacing='   '
 	_program_commandLine_helpMessage_configurationKeys="
-  luvi_applicationsPath  Equivalent to --application-path
-  luvi_outputPath       Equivalent to --output-path
-  luvi_copyrightFile    Equivalent to --copyright-file
+  luvi_applicationsPath  Equivalent to --applications-path
+  luvi_outputPath        Equivalent to --output-path
+  luvi_copyrightFile     Equivalent to --copyright-file
 "
 	_program_commandLine_helpMessage_examples="
-  ${_program_name}
+  ${_program_name} --run myapp -- -s -o -m -e argument
 "
 }
 
@@ -85,7 +80,11 @@ _program_commandLine_optionExists()
         ;;
 		
 		r|run)
-			echo 'yes--optionally-argumented'
+			echo 'yes-argumented'
+		;;
+		
+		m|main)
+			echo 'yes-argumented'
 		;;
 		
 		*)
@@ -101,10 +100,6 @@ _program_commandLine_processOptionWithoutArgument()
 		
 		f|force)
 			luvi_force='yes'
-		;;
-		
-		r|run)
-			luvi_run='unbuilt'
 		;;
 		
 	esac
@@ -130,8 +125,11 @@ _program_commandLine_processOptionWithArgument()
 		;;
 		
 		r|run)
-			luvi_validate_run $core_commandLine_exitCode_USAGE 'option' "$optionNameIncludingHyphens" "$optionValue"
 			luvi_run="$optionValue"
+		;;
+		
+		m|main)
+			luvi_main="$optionValue"
 		;;
 		
 	esac
@@ -139,8 +137,8 @@ _program_commandLine_processOptionWithArgument()
 
 _program_commandLine_handleNonOptions()
 {
-	core_variable_array_initialise luvi_applications
-	core_variable_array_append luvi_applications "$@"
+	core_variable_array_initialise luvi_nonOptions
+	core_variable_array_append luvi_nonOptions "$@"
 }
 
 _program_commandLine_validate()
@@ -169,12 +167,12 @@ _program_commandLine_validate()
     else
         luvi_force='no'
     fi
-
-    if core_variable_isSet luvi_run; then
-        luvi_validate_run $core_commandLine_exitCode_CONFIG 'configuration setting' 'luvi_run' "$luvi_run"
-    else
-        luvi_run="$luvi_run_default"
-    fi
+	
+	if core_variable_isSet luvi_run; then
+		if core_variable_isUnset luvi_main; then
+			luvi_main="$luvi_main_default"
+		fi
+	fi
 }
 
 # Assumes pwd, and so requires this code to be running from this folder

@@ -1,45 +1,203 @@
-# This file is part of luvi. It is subject to the licence terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi/master/COPYRIGHT. No part of luvi, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
-# Copyright © 2015 The developers of luvi. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi/master/COPYRIGHT.
+# This file is part of luvi-builder. It is subject to the licence terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi-builder/master/COPYRIGHT. No part of luvi-builder, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
+# Copyright © 2015 The developers of luvi-builder. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi-builder/master/COPYRIGHT.
 
 
-luvi_findOurPath()
+core_usesIn luvi application
+core_usesIn luvi applications
+luvi_main()
 {
-	luvi_ourPath="$(pwd -P)"
+	# luvi will auto-include deps/require.lua (and register it as require)
+	# Add deps/pretty-print OR deps/print-print.lua
+	# See line 414+ from https://github.com/luvit/luvi/blob/master/src/lua/init.lua
+	
+	luvi_discoverVersionRequired
+	luvi_defineCompilationParameters
+	luvi_downloadLuviExecutableIfRequired
+	luvi_unsetInheritatedEnvironmentVariables
+
+	if core_variable_isSet luvi_run; then
+		luvi_application_run
+	else
+		luvi_applications_populateAllApplicationsIfNoneSupplied
+		luvi_applications_createOutputPath
+		luvi_applications_process	
+	fi
 }
 
-core_dependency_requires '*' uname chmod
-luvi_findExecutable()
+core_dependency_requires '*' readlink
+luvi_discoverVersionRequired()
 {
-	if core_compatibility_whichNoOutput luvi; then
-		luvi_executable="$(core_compatibility_which luvi)"
-		return 0
+	local luviBinParentParentFolderPath="$_program_libPath"/luvi
+	local currentLuviBinParentFolderPath="$luviBinParentParentFolderPath"/current
+	
+	if [ ! -L "$currentLuviBinParentFolderPath" ]; then
+		core_exitError $core_commandLine_exitCode_OSFILE "Could not find required luvi current link at '$luviBinParentParentFolderPath'"
 	fi
+	
+	luvi_version="$(readlink "$currentLuviBinParentFolderPath")"
+	luvi_executableParentPath="$luviBinParentParentFolderPath"/"$luvi_version"
+}
 
-	local variant='static'
-	local operatingSystem="$(uname)"
-	local machineHardware="$(uname -m)"
-	local luviName=luvi-"$variant"-"$operatingSystem"_"$machineHardware"
+core_dependency_requires '*' uname
+luvi_defineCompilationParameters()
+{
+	# SIC: luvi uses American English
+	luvi_flavor='regular'
+	luvi_operatingSystem="$(uname -s)"
+	luvi_machineHardware="$(uname -m)"
+	luvi_fileExtension=''
 	
-	local luviExecutableParentPath="$luvi_ourPath"/lib/luvi/current
-	if ! core_path_isReadableAndSearchableFolderPath "$luviExecutableParentPath"; then
-		core_exitError $core_commandLine_exitCode_OSFILE "Could not find required luvi executable on the PATH or in parent folder '$luviExecutableParentPath'"
-	fi
+	# As of luvi v1.1.0, 'static' has become 'regular' and 'large' no longer exists
+	case "$luvi_operatingSystem" in
+		
+		Darwin)
+		
+			case "$luvi_machineHardware" in
+				
+				x86_64)
+					:
+				;;
+				
+				amd64)
+					luvi_machineHardware=x86_64
+				;;
+				
+				*)
+					core_exitError $core_commandLine_exitCode_OSERR "luvi on '$luvi_operatingSystem' does not support the machine hardware '$luvi_machineHardware'"
+				;;
+				
+			esac
+		;;
+		
+		Linux)
+		
+			case "$luvi_machineHardware" in
+				
+				x86_64|i686|armv6l|armv7l)
+					:
+				;;
+				
+				amd64)
+					luvi_machineHardware=x86_64
+				;;
+				
+				*)
+					core_exitError $core_commandLine_exitCode_OSERR "luvi on '$luvi_operatingSystem' does not support the machine hardware '$luvi_machineHardware'"
+				;;
+				
+			esac
+		;;
+		
+		FreeBSD)
+		
+			case "$luvi_machineHardware" in
+				
+				x86_64)
+					luvi_machineHardware=amd64
+				;;
+				
+				amd64)
+					:
+				;;
+				
+				*)
+					core_exitError $core_commandLine_exitCode_OSERR "luvi on '$luvi_operatingSystem' does not support the machine hardware '$luvi_machineHardware'"
+				;;
+				
+			esac
+		;;
 	
-	pushd "$luviExecutableParentPath"
+		# Adjust for Windows; see https://en.wikipedia.org/wiki/Uname
+		CYGWIN_NT-*|MINGW32_*|MSYS_*|Interix|Windows)
+
+			luvi_operatingSystem=Windows
+			luvi_fileExtension='.exe'
+			
+			case "$luvi_machineHardware" in
+				
+				x86_64)
+					luvi_machineHardware=amd64
+				;;
+				
+				amd64)
+					:
+				;;
+				
+				*)
+					core_exitError $core_commandLine_exitCode_OSERR "luvi on '$luvi_operatingSystem' does not support the machine hardware '$luvi_machineHardware'"
+				;;
+				
+			esac
+		;;
+		
+		*)
+			core_exitError $core_commandLine_exitCode_OSERR "luvi on '$luvi_operatingSystem' is not supported (there is unofficial support for Solaris elsewhere)"
+		;;
+		
+	esac
+}
+
+core_usesIn curl
+core_dependency_requires '*' chmod rm
+luvi_downloadLuviExecutableIfRequired()
+{
+	luvi_executableName=luvi-"$luvi_flavor"-"$luvi_operatingSystem"_"$luvi_machineHardware""${luvi_fileExtension}"
+	luvi_executable="$luvi_executableParentPath"/"$luvi_executableName"
 	
-		local absoluteLuviExecutableParentPath="$(pwd -P)"
-	
-	popd
-	
-	luvi_executable="$absoluteLuviExecutableParentPath"/"$luviName"
-	if [ ! -f "$luvi_executable" ]; then
-		core_exitError $core_commandLine_exitCode_OSFILE "Could not find required luvi executable on the PATH or at '$luvi_executable'"
-	fi
+	# If not executable, then not completely downloaded last time
 	if [ ! -x "$luvi_executable" ]; then
-		chmod +x "$luvi_executable" 2>/dev/null || true
+		rm -rf "$luvi_executable"
+	fi
+	
+	# If not a file, then get rid of rubbish
+	if [ ! -f "$luvi_executable" ]; then
+		rm -rf "$luvi_executable"
+	fi
+	
+	# No executable cached, download
+	if [ ! -e "$luvi_executable" ]; then
+	
+		local url=https://github.com/luvit/luvi/releases/download/"$luvi_version"/"$luvi_executableName"
+		
+		if core_compatibility_whichNoOutput curl; then
+			
+			local curl_httpVersion
+			local curl_httpStatusCode
+			local curl_httpReasonPhrase
+			
+			set +e
+			curl_http 'none' '' GET "$url" "$luvi_executable"
+			local exitCode=$?
+			set -e
+			
+			if [ $exitCode -ne 0 ]; then
+				rm -rf "$luvi_executable"
+				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using curl (curl exit code was '$exitCode')"
+			fi
+				
+			if [ $curl_httpStatusCode -ne 200 ]; then
+				rm -rf "$luvi_executable"
+				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using curl (status code was '$curl_httpStatusCode')"
+			fi
+		else
+			
+			# Assumes a BusyBox wget (ie primitive)
+			
+			set +e
+			wget -q -O "$luvi_executable" -U "$curl_userAgent"
+			local exitCode=$?
+			set -e
+			
+			if [ $exitCode -ne 0 ]; then
+				rm -rf "$luvi_executable"
+				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using wget (wget exit code was '$exitCode')"
+			fi
+			
+		fi
+		
+		chmod +x "$luvi_executable"
 	fi
 }
-
 
 luvi_unsetInheritatedEnvironmentVariables()
 {
@@ -48,46 +206,3 @@ luvi_unsetInheritatedEnvironmentVariables()
 	core_variable_unset LUVI_TARGET
 }
 
-luvi_populateAllApplicationsIfNoneSupplied()
-{
-	if ! core_variable_array_isEmpty luvi_applications; then
-		return 0
-	fi
-	
-	local application
-	pushd "$luvi_applicationsPath"
-	
-		set +f
-		for application in *
-		do
-			set -f
-			if [ -d "$application" ]; then
-				if [ -s "$application"/main.lua ]; then
-					core_variable_array_append luvi_applications "$application"
-				fi
-			fi
-		done
-		set -f
-	popd
-}
-
-core_dependency_requires '*' mkdir
-luvi_createOutputPathIfBuilding()
-{
-	case "$luvi_run" in
-		
-		compile|built)
-			mkdir -m 0755 -p "$luvi_outputPath"
-		;;
-		
-	esac
-}
-
-core_usesIn luvi validate
-core_usesIn luvi application
-luvi_processApplications()
-{
-	luvi_validate_applicationCanBeBuilt
-	
-	core_variable_array_iterate luvi_applications luvi_application_process
-}
