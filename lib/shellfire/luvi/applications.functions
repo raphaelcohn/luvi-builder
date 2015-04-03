@@ -24,15 +24,3 @@ luvi_applications_populateAllApplicationsIfNoneSupplied()
 		set -f
 	popd
 }
-
-core_dependency_requires '*' mkdir
-luvi_applications_createOutputPath()
-{
-	mkdir -m 0755 -p "$luvi_outputPath"
-}
-
-core_usesIn luvi application
-luvi_applications_process()
-{	
-	core_variable_array_iterate luvi_nonOptions luvi_application_build
-}

@@ -23,10 +23,10 @@ luvi_application_run()
 	fi
 	
 	_luvi_application_run_callback()
-	{	
+	{
 		pushd "$luvi_applicationsPath"
 			
-			LUVI_APP="$luvi_application_name" LUVI_MAIN="$luvi_main" "$luvi_executable" "$@"
+			LUVI_APP="$luvi_application_name" LUVI_MAIN="$luvi_actualMain" "$luvi_executable" "$@"
 			
 		popd
 	}
@@ -36,8 +36,11 @@ luvi_application_run()
 
 luvi_application_build()
 {
-	luvi_application_setAndValidateVariables "$core_variable_array_element" 'non-options' 'APPLICATIONs'	
-
+	luvi_application_setAndValidateVariables "$core_variable_array_element" 'non-options' 'APPLICATIONs'
+	
+	luvi_application_build_prepareUnpackedOnce
+	luvi_application_build_preparePackedOnce
+	
 	local luvi_application_mains
 	local luvi_application_mains_initialised
 	core_variable_array_initialise luvi_application_mains
@@ -70,13 +73,15 @@ luvi_application_build()
 			core_validate_exit "The $category '$luvi_application_optionCategory' has an application '$luvi_application_name' with no main/*.lua or main.lua"
 		fi
 	fi
-	
+
+	local isMainLuaVariant=false
 	core_variable_array_iterate luvi_application_mains luvi_application_buildVariant
 
 	# build the main.lua variant ONLY if main/"$luvi_application_name".lua doesn't exist and main.lua does
 	if ! core_variable_array_contains luvi_application_mains "$luvi_application_name"; then
 		if core_path_isReadableFilePath "$luvi_application_path"/main.lua; then
 			local core_variable_array_element="$luvi_application_name"
+			local isMainLuaVariant=true
 			luvi_application_buildVariant
 		fi
 	fi
@@ -92,17 +97,110 @@ luvi_application_setAndValidateVariables()
 	core_validate_folderPathReadableAndSearchable "$core_commandLine_exitCode_USAGE" "$luvi_application_optionCategory" "$luvi_application_optionName" "$luvi_application_path"
 }
 
+core_dependency_requires '*' mkdir rsync rm ln
+luvi_application_build_prepareUnpackedOnce()
+{
+	luvi_application_unpackedPath="$luvi_target_unpackedOutputPath"/"$luvi_application_name"
+	mkdir -m 0755 -p "$luvi_application_unpackedPath"
+	
+	luvi_application_codeUnpackedPath="$luvi_application_unpackedPath"/application
+	mkdir -m 0755 -p "$luvi_application_codeUnpackedPath"
+	
+	# Note this uses rsync, to create a deployment that will be rsync friendly
+	rsync --archive --hard-links --acls --xattrs --copy-links "$luvi_application_path"/ "$luvi_application_codeUnpackedPath"/
+	
+	# Create symlink to a luvi for all applications, so allowing replacement by rsync --copy-links if only rsync'ing the application not all applications
+	rm -rf "$luvi_application_unpackedPath"/luvi"${luvi_fileExtension}"
+	ln -s ../luvi"${luvi_fileExtension}" "$luvi_application_unpackedPath"/luvi"${luvi_fileExtension}"
+}
+
+luvi_application_build_preparePackedOnce()
+{
+	luvi_application_packedPath="$luvi_target_packedOutputPath"/"$luvi_application_name"
+	mkdir -m 0755 -p "$luvi_application_packedPath"
+}
+
 core_dependency_requires '*' mkdir
 luvi_application_buildVariant()
 {
 	local variantName="$core_variable_array_element"
 	
-	luvi_compilationOutputPath="$luvi_outputPath"/"$luvi_application_name"/"$luvi_operatingSystem"/"$luvi_machineHardware"/"$luvi_flavor"
-	mkdir -m 0755 -p "$luvi_compilationOutputPath"
+	luvi_application_buildUnpackedVariant
+	luvi_application_buildPackedVariant
+}
+
+core_dependency_requires '*' cat chmod
+luvi_application_buildUnpackedVariant()
+{	
+	local variantScriptPath="$luvi_application_unpackedPath"/"$variantName"
 	
-	luvi_application_targetFilePath="$luvi_compilationOutputPath"/"$variantName""${luvi_fileExtension}"
+	cat >"$variantScriptPath" <<-'EOF'
+		#!/usr/bin/env sh
+		set -e
+		set -u
+		
+		core_compatibility_dirname()
+		{
+			local converted="${1%/*}"
+			if [ "$converted" = "$1" ]; then
+				printf '%s' '.'
+			else
+				printf '%s' "$converted"
+			fi
+		}
+		
+		# Considered suboptimal practice to use $0, but it works for most shells in most situations, and, in this one, we have no control over installation
+		cd "$(core_compatibility_dirname "$0")" 2>/dev/null
+			ourPath="$(pwd -P)"
+		cd - 2>/dev/null
+		
+		# Conceivably could fail if we're installed in '/'
+		cd "$ourPath"/.. 2>/dev/null
+			ourParentPath="$(pwd)"
+		cd - 2>/dev/null
+		
+		cd "$ourPath" 2>/dev/null
+		
+		# Ensures our related applications and luvi (if we want to use a local copy) are on the path
+		export PATH="$PATH":"$ourPath"
+	EOF
 	
-	luvi_application_checkIfCanOverwrite "$luvi_application_targetFilePath"
+	if $isMainLuaVariant; then
+		luvi_actualMain='main.lua'
+	else
+		luvi_actualMain=main/"$luvi_main".lua
+	fi
+	
+	printf '%s "$@"' "LUVI_APP='application' LUVI_MAIN='$luvi_actualMain' luvi${luvi_fileExtension}" >>"$variantScriptPath"
+	
+	chmod +x "$variantScriptPath"
+}
+
+core_dependency_requires '*' rm zip cat chmod
+luvi_application_buildPackedVariant()
+{
+	luvi_application_targetFilePath="$luvi_application_packedPath"/"$variantName""${luvi_fileExtension}"
+	rm -rf "$luvi_application_targetFilePath"
+	
+	local zipFilePath="$luvi_application_packedPath"/"$variantName".zip
+	rm -rf "$zipFilePath"
+	
+	pushd "$luvi_application_codeUnpackedPath"
+		
+		zip -q -r "$zipFilePath" .
+		
+	popd
+	
+	cat "$luvi_executable" "$zipFilePath" >"$luvi_application_targetFilePath"
+	rm -rf "$zipFilePath"
+	chmod +x "$luvi_application_targetFilePath"
+}
+
+core_dependency_requires '*' rm
+luvi_application_buildPackedVariant_ONLY_WORKS_FOR_HOST()
+{
+	luvi_application_targetFilePath="$luvi_application_packedPath"/"$variantName""${luvi_fileExtension}"
+	rm -rf "$luvi_application_targetFilePath"
 	
 	pushd "$luvi_applicationsPath"
 		
@@ -113,20 +211,4 @@ luvi_application_buildVariant()
 		fi
 
 	popd
-}
-
-core_dependency_requires '*' rm
-luvi_application_checkIfCanOverwrite()
-{
-	local path="$1"
-	
-	if [ ! -e "$path" ]; then
-		return
-	fi
-	
-	if core_variable_isTrue "$luvi_force"; then
-		rm -rf "$path"
-	else
-		core_exitError $core_commandLine_exitCode_CANTCREAT "Can not overwrite existing folder/file '$path'; please specify --force to do so"
-	fi
 }

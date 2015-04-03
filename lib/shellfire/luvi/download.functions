@@ -1,0 +1,81 @@
+# This file is part of luvi-builder. It is subject to the licence terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi-builder/master/COPYRIGHT. No part of luvi-builder, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
+# Copyright © 2015 The developers of luvi-builder. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi-builder/master/COPYRIGHT.
+
+
+luvi_download_executableName()
+{
+	local flavor="$1"
+	local operatingSystem="$2"
+	local machineHardware="$3"
+	local fileExtension="$4"
+	
+	printf '%s' luvi-"$luvi_flavor"-"$luvi_operatingSystem"_"$luvi_machineHardware""${luvi_fileExtension}"
+}
+
+core_usesIn curl
+core_dependency_requires '*' mkdir chmod rm
+luvi_download_retrieveLuviExecutableIfRequired()
+{
+	local flavor="$1"
+	local operatingSystem="$2"
+	local machineHardware="$3"
+	local fileExtension="$4"
+	
+	local luvi_executableName="$(luvi_download_executableName "$flavor" "$operatingSystem" "$machineHardware" "$fileExtension")"
+	mkdir -m 0755 -p "$luvi_executableParentPath"
+	local luvi_executable="$luvi_executableParentPath"/"$luvi_executableName"
+	
+	# If not executable, then not completely downloaded last time
+	if [ ! -x "$luvi_executable" ]; then
+		rm -rf "$luvi_executable"
+	fi
+	
+	# If not a file, then get rid of rubbish
+	if [ ! -f "$luvi_executable" ]; then
+		rm -rf "$luvi_executable"
+	fi
+	
+	# No executable cached, download
+	if [ ! -e "$luvi_executable" ]; then
+	
+		local url=https://github.com/luvit/luvi/releases/download/"$luvi_version"/"$luvi_executableName"
+		
+		if core_compatibility_whichNoOutput curl; then
+			
+			local curl_httpVersion
+			local curl_httpStatusCode
+			local curl_httpReasonPhrase
+			
+			set +e
+			curl_http 'none' '' GET "$url" "$luvi_executable"
+			local exitCode=$?
+			set -e
+			
+			if [ $exitCode -ne 0 ]; then
+				rm -rf "$luvi_executable"
+				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using curl (curl exit code was '$exitCode')"
+			fi
+				
+			if [ $curl_httpStatusCode -ne 200 ]; then
+				rm -rf "$luvi_executable"
+				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using curl (status code was '$curl_httpStatusCode')"
+			fi
+		else
+			
+			# Assumes a BusyBox wget (ie primitive)
+			
+			set +e
+			wget -q -O "$luvi_executable" -U "$curl_userAgent"
+			local exitCode=$?
+			set -e
+			
+			if [ $exitCode -ne 0 ]; then
+				rm -rf "$luvi_executable"
+				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using wget (wget exit code was '$exitCode')"
+			fi
+			
+		fi
+		
+		chmod +x "$luvi_executable"
+	fi
+}

@@ -12,15 +12,14 @@ luvi_main()
 	
 	luvi_discoverVersionRequired
 	luvi_defineCompilationParameters
-	luvi_downloadLuviExecutableIfRequired
 	luvi_unsetInheritatedEnvironmentVariables
 
 	if core_variable_isSet luvi_run; then
+		luvi_downloadLuviExecutableIfRequired
 		luvi_application_run
 	else
 		luvi_applications_populateAllApplicationsIfNoneSupplied
-		luvi_applications_createOutputPath
-		luvi_applications_process	
+		luvi_targets_all
 	fi
 }
 
@@ -137,69 +136,6 @@ luvi_defineCompilationParameters()
 	esac
 }
 
-core_usesIn curl
-core_dependency_requires '*' mkdir chmod rm
-luvi_downloadLuviExecutableIfRequired()
-{
-	luvi_executableName=luvi-"$luvi_flavor"-"$luvi_operatingSystem"_"$luvi_machineHardware""${luvi_fileExtension}"
-	mkdir -m 0755 -p "$luvi_executableParentPath"
-	luvi_executable="$luvi_executableParentPath"/"$luvi_executableName"
-	
-	# If not executable, then not completely downloaded last time
-	if [ ! -x "$luvi_executable" ]; then
-		rm -rf "$luvi_executable"
-	fi
-	
-	# If not a file, then get rid of rubbish
-	if [ ! -f "$luvi_executable" ]; then
-		rm -rf "$luvi_executable"
-	fi
-	
-	# No executable cached, download
-	if [ ! -e "$luvi_executable" ]; then
-	
-		local url=https://github.com/luvit/luvi/releases/download/"$luvi_version"/"$luvi_executableName"
-		
-		if core_compatibility_whichNoOutput curl; then
-			
-			local curl_httpVersion
-			local curl_httpStatusCode
-			local curl_httpReasonPhrase
-			
-			set +e
-			curl_http 'none' '' GET "$url" "$luvi_executable"
-			local exitCode=$?
-			set -e
-			
-			if [ $exitCode -ne 0 ]; then
-				rm -rf "$luvi_executable"
-				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using curl (curl exit code was '$exitCode')"
-			fi
-				
-			if [ $curl_httpStatusCode -ne 200 ]; then
-				rm -rf "$luvi_executable"
-				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using curl (status code was '$curl_httpStatusCode')"
-			fi
-		else
-			
-			# Assumes a BusyBox wget (ie primitive)
-			
-			set +e
-			wget -q -O "$luvi_executable" -U "$curl_userAgent"
-			local exitCode=$?
-			set -e
-			
-			if [ $exitCode -ne 0 ]; then
-				rm -rf "$luvi_executable"
-				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using wget (wget exit code was '$exitCode')"
-			fi
-			
-		fi
-		
-		chmod +x "$luvi_executable"
-	fi
-}
-
 luvi_unsetInheritatedEnvironmentVariables()
 {
 	core_variable_unset LUVI_APP
@@ -207,3 +143,9 @@ luvi_unsetInheritatedEnvironmentVariables()
 	core_variable_unset LUVI_TARGET
 }
 
+core_usesIn luvi download
+luvi_downloadLuviExecutableIfRequired()
+{
+	luvi_download_retrieveLuviExecutableIfRequired "$luvi_flavor" "$luvi_operatingSystem" "$luvi_machineHardware" "$luvi_fileExtension"
+	luvi_executable="$luvi_executableParentPath"/"$(luvi_download_executableName "$luvi_flavor" "$luvi_operatingSystem" "$luvi_machineHardware" "$luvi_fileExtension")"
+}
