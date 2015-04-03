@@ -16,9 +16,7 @@ luvi_applications_populateAllApplicationsIfNoneSupplied()
 		do
 			set -f
 			if [ -d "$application" ]; then
-				if [ -s "$application"/main.lua ]; then
-					core_variable_array_append luvi_nonOptions "$application"
-				fi
+				core_variable_array_append luvi_nonOptions "$application"
 			fi
 		done
 		set -f
