@@ -4,6 +4,7 @@
 
 core_usesIn luvi application
 core_usesIn luvi applications
+core_usesIn luvi targets
 luvi_main()
 {
 	# luvi will auto-include deps/require.lua (and register it as require)

@@ -9,7 +9,12 @@ luvi_download_executableName()
 	local machineHardware="$3"
 	local fileExtension="$4"
 	
-	printf '%s' luvi-"$luvi_flavor"-"$luvi_operatingSystem"_"$luvi_machineHardware""${luvi_fileExtension}"
+	# Hyphens vs Underscores
+	if [ "$operatingSystem" = 'Windows' ]; then
+		printf '%s' luvi-"$luvi_flavor"-"$luvi_operatingSystem"-"$luvi_machineHardware""${luvi_fileExtension}"
+	else
+		printf '%s' luvi-"$luvi_flavor"-"$luvi_operatingSystem"_"$luvi_machineHardware""${luvi_fileExtension}"
+	fi
 }
 
 core_usesIn curl

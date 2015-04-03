@@ -168,7 +168,7 @@ luvi_application_buildUnpackedVariant()
 	if $isMainLuaVariant; then
 		luvi_actualMain='main.lua'
 	else
-		luvi_actualMain=main/"$luvi_main".lua
+		luvi_actualMain=main/"$variantName".lua
 	fi
 	
 	printf '%s "$@"' "LUVI_APP='application' LUVI_MAIN='$luvi_actualMain' luvi${luvi_fileExtension}" >>"$variantScriptPath"

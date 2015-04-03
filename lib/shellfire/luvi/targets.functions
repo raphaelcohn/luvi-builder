@@ -17,18 +17,21 @@ luvi_targets_all()
 		local luvi_fileExtension
 		for luvi_operatingSystem in 'Darwin' 'Linux' 'FreeBSD' 'Windows'
 		do
-			case "$luvi_operatingSystem"
+			case "$luvi_operatingSystem" in
 				
 				Darwin)
 					set -- x86_64
+					luvi_fileExtension=''
 				;;
 				
 				Linux)
 					set -- x86_64 i686 armv6l armv7l
+					luvi_fileExtension=''
 				;;
 				
 				FreeBSD)
 					set -- amd64
+					luvi_fileExtension=''
 				;;
 				
 				Windows)
