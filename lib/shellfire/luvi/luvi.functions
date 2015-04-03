@@ -138,10 +138,11 @@ luvi_defineCompilationParameters()
 }
 
 core_usesIn curl
-core_dependency_requires '*' chmod rm
+core_dependency_requires '*' mkdir chmod rm
 luvi_downloadLuviExecutableIfRequired()
 {
 	luvi_executableName=luvi-"$luvi_flavor"-"$luvi_operatingSystem"_"$luvi_machineHardware""${luvi_fileExtension}"
+	mkdir -m 0755 -p "$luvi_executableParentPath"
 	luvi_executable="$luvi_executableParentPath"/"$luvi_executableName"
 	
 	# If not executable, then not completely downloaded last time
