@@ -6,9 +6,8 @@
 
 [luvi] variants are:-
 
-* `large`
-* `static`
-* `tiny`
+* `regular` - with openssl
+* `tiny` - without openssl
 
 ## Operating Systems
 
