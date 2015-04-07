@@ -3,6 +3,7 @@
 
 
 core_usesIn luvi application
+core_usesIn luvi tcc
 core_usesIn luvi applications
 core_usesIn luvi targets
 luvi_main()
@@ -11,9 +12,11 @@ luvi_main()
 	# Add deps/pretty-print OR deps/print-print.lua
 	# See line 414+ from https://github.com/luvit/luvi/blob/master/src/lua/init.lua
 	
-	luvi_discoverVersionRequired
+	luvi_discoverLuviVersionRequired
 	luvi_defineCompilationParameters
 	luvi_unsetInheritatedEnvironmentVariables
+	
+	luvi_tcc_makeIfRequired
 
 	if core_variable_isSet luvi_run; then
 		luvi_downloadLuviExecutableIfRequired
@@ -24,18 +27,15 @@ luvi_main()
 	fi
 }
 
-core_dependency_requires '*' readlink
-luvi_discoverVersionRequired()
+core_usesIn luvi version
+luvi_discoverLuviVersionRequired()
 {
-	local luviBinParentParentFolderPath="$_program_libPath"/luvi
-	local currentLuviBinParentFolderPath="$luviBinParentParentFolderPath"/current
+	local luvi_version_discovered
+	local luvi_version_executableParentPath
+	luvi_version_discoverVersionRequired luvi
 	
-	if [ ! -L "$currentLuviBinParentFolderPath" ]; then
-		core_exitError $core_commandLine_exitCode_OSFILE "Could not find required luvi current link at '$luviBinParentParentFolderPath'"
-	fi
-	
-	luvi_version="$(readlink "$currentLuviBinParentFolderPath")"
-	luvi_executableParentPath="$luviBinParentParentFolderPath"/"$luvi_version"
+	luvi_version="$luvi_version_discovered"
+	luvi_executableParentPath="$luvi_version_executableParentPath"
 }
 
 core_dependency_requires '*' uname
@@ -47,7 +47,6 @@ luvi_defineCompilationParameters()
 	luvi_machineHardware="$(uname -m)"
 	luvi_fileExtension=''
 	
-	# As of luvi v1.1.0, 'static' has become 'regular' and 'large' no longer exists
 	case "$luvi_operatingSystem" in
 		
 		Darwin)

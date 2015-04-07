@@ -1,0 +1,156 @@
+# This file is part of luvi-builder. It is subject to the licence terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi-builder/master/COPYRIGHT. No part of luvi-builder, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
+# Copyright © 2015 The developers of luvi-builder. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/raphaelcohn/luvi-builder/master/COPYRIGHT.
+
+
+core_dependency_requires uname
+luvi_tcc_makeIfRequired()
+{
+	local _luvi_tcc_makeIfRequired_prefix="$_program_libPath"/tcc/built
+	local _luvi_tcc_makeIfRequired_sourcePath="$_program_libPath"/tcc/tinycc
+	local _luvi_tcc_makeIfRequired_sysIncludesPath
+	local _luvi_tcc_makeIfRequired_libsPath
+	local _luvi_tcc_makeIfRequired_crtPrefix
+	local _luvi_tcc_makeIfRequired_elfInterpreterPath
+	
+	luvi_tcc_executableParentPath="$_luvi_tcc_makeIfRequired_prefix"/bin
+	luvi_tcc_executable="$luvi_tcc_executableParentPath"/tcc
+	if [ -x "$luvi_tcc_executable" ]; then
+		return 0
+	fi
+	
+	if [ "$(uname)" = 'Darwin' ]; then
+		local _luvi_tcc_makeIfRequired_isMacOsX=true
+		
+	else
+		local _luvi_tcc_makeIfRequired_isMacOsX=false
+	fi
+	
+	# TODO: --libpaths=XXX (system lib paths)
+	# TODO: Consider --sysroot=PREFIX (put before --libpaths / --sysincludepaths)
+	# TODO: fix Darwin dylib problem
+	# TODO: fix Darwin arm64
+	
+	luvi_tcc_makeIfRequired_prepare
+	luvi_tcc_makeIfRequired_clean
+	luvi_tcc_makeIfRequired_computePaths
+	luvi_tcc_makeIfRequired_configure
+	luvi_tcc_makeIfRequired_make
+	luvi_tcc_makeIfRequired_clean
+}
+
+core_dependency_requires '*' rm mkdir
+luvi_tcc_makeIfRequired_prepare()
+{
+	rm -rf "$_luvi_tcc_makeIfRequired_prefix"
+	mkdir -m 0755 -p "$_luvi_tcc_makeIfRequired_prefix"
+}
+
+core_dependency_requires '*' git make
+luvi_tcc_makeIfRequired_clean()
+{
+	pushd "$_luvi_tcc_makeIfRequired_sourcePath"
+
+		make distclean 1>/dev/null 2>/dev/null || true
+		git clean -d -f -q -x
+		git reset --hard -q
+		
+	popd
+}
+
+luvi_tcc_makeIfRequired_computePaths()
+{
+	if $_luvi_tcc_makeIfRequired_isMacOsX; then
+		luvi_tcc_makeIfRequired_computePaths_computeMacOsXPaths
+	else
+		luvi_tcc_makeIfRequired_computePaths_computeLinuxPaths
+	fi
+}
+
+# core_dependency_requires '*' gcc ar strip install
+luvi_tcc_makeIfRequired_configure()
+{
+	# {B} is replaced by location of local include files. Not sure this is a particularly good idea
+	# Needs to be different for Windows
+	set -- ./configure \
+		--extra-cflags="-Wall -O2" \
+		--prefix="$_luvi_tcc_makeIfRequired_prefix" \
+		--source-path="$_luvi_tcc_makeIfRequired_sourcePath" \
+		--sysincludepaths="$_luvi_tcc_makeIfRequired_sysIncludesPath":{B}/include \
+		--libpaths="$_luvi_tcc_makeIfRequired_libsPath" \
+		--strip-binaries \
+		--enable-cross
+	
+	if $_luvi_tcc_makeIfRequired_isMacOsX; then
+		set -- "$@" --crtprefix="$_luvi_tcc_makeIfRequired_crtPrefix" --elfinterp="$_luvi_tcc_makeIfRequired_elfInterpreterPath"
+	else
+		set -- "$@" --disable-static
+	fi
+	
+	pushd "$_luvi_tcc_makeIfRequired_sourcePath"
+
+		if [ "$(core_init_verbosity)" -gt 1 ]; then
+			"$@"
+		else
+			"$@" 1>/dev/null 2>/dev/null
+		fi
+	
+	popd
+}
+
+core_dependency_requires '*' make
+luvi_tcc_makeIfRequired_make()
+{
+	pushd "$_luvi_tcc_makeIfRequired_sourcePath"
+
+		if [ "$(core_init_verbosity)" -gt 1 ]; then
+			
+			{
+				make -j1
+				make -j1 install
+			}
+			
+		else
+			
+			{
+				make -j1
+				make -j1 install
+			} 1>/dev/null 2>/dev/null
+			
+		fi
+	
+	popd
+}
+
+#core_dependency_requires Homebrew sw_vers xcodebuild
+luvi_tcc_makeIfRequired_computePaths_computeMacOsXPaths()
+{
+	# Mac OS X
+	# eg 10.10.2
+	local macOsXFullVersion="$(/usr/bin/sw_vers -productVersion)"
+	
+	local macOsXVersionMajor
+	local macOsXVersionMinor
+	local macOsXVersionRevision
+	
+	IFS='.' read -r macOsXVersionMajor macOsXVersionMinor macOsXVersionRevision <<-EOF
+		${macOsXFullVersion}
+	EOF
+	
+	local macOsXSdk="macosx${macOsXVersionMajor}.${macOsXVersionMinor}"
+	
+	local macOsXSdkPath="$(xcodebuild -version -sdk "$macOsXSdk" Path)"
+	
+	
+	_luvi_tcc_makeIfRequired_sysIncludesPath=/usr/local/include:"$macOsXSdkPath"/usr/include
+	_luvi_tcc_makeIfRequired_libsPath=/usr/local/lib:"$macOsXSdkPath"/usr/lib
+}
+
+# For now, this ignores /lib64, etc; it's just too horrible.
+# Only works for Ubuntu / Debian
+luvi_tcc_makeIfRequired_computePaths_computeLinuxPaths()
+{
+	_luvi_tcc_makeIfRequired_sysIncludesPath=/usr/local/include:/usr/include
+	_luvi_tcc_makeIfRequired_libsPath=/usr/local/lib:/usr/lib/x86_64-linux-gnu:/usr/lib:/lib/x86_64-linux-gnu:/lib
+	_luvi_tcc_makeIfRequired_crtPrefix=/usr/lib/x86_64-linux-gnu
+	_luvi_tcc_makeIfRequired_elfInterpreterPath=/lib64/ld-linux-x86-64.so.2
+}

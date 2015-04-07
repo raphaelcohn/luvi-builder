@@ -42,45 +42,54 @@ luvi_download_retrieveLuviExecutableIfRequired()
 	
 	# No executable cached, download
 	if [ ! -e "$luvi_executable" ]; then
-	
-		local url=https://github.com/luvit/luvi/releases/download/"$luvi_version"/"$luvi_executableName"
 		
-		if core_compatibility_whichNoOutput curl; then
-			
-			local curl_httpVersion
-			local curl_httpStatusCode
-			local curl_httpReasonPhrase
-			
-			set +e
-			curl_http 'none' '' GET "$url" "$luvi_executable"
-			local exitCode=$?
-			set -e
-			
-			if [ $exitCode -ne 0 ]; then
-				rm -rf "$luvi_executable"
-				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using curl (curl exit code was '$exitCode')"
-			fi
-				
-			if [ $curl_httpStatusCode -ne 200 ]; then
-				rm -rf "$luvi_executable"
-				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using curl (status code was '$curl_httpStatusCode')"
-			fi
-		else
-			
-			# Assumes a BusyBox wget (ie primitive)
-			
-			set +e
-			wget -q -O "$luvi_executable" -U "$curl_userAgent"
-			local exitCode=$?
-			set -e
-			
-			if [ $exitCode -ne 0 ]; then
-				rm -rf "$luvi_executable"
-				core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download luvi from '$url' using wget (wget exit code was '$exitCode')"
-			fi
-			
-		fi
+		luvi_download_file https://github.com/luvit/luvi/releases/download/"$luvi_version"/"$luvi_executableName" "$luvi_executable"
 		
 		chmod +x "$luvi_executable"
+	fi
+}
+
+core_dependency_requires '*' rm
+luvi_download_file()
+{
+	local url="$1"
+	local downloadLocationFilePath="$2"
+	
+	rm -rf "$downloadLocationFilePath"
+	
+	if core_compatibility_whichNoOutput curl; then
+		
+		local curl_httpVersion
+		local curl_httpStatusCode
+		local curl_httpReasonPhrase
+		
+		set +e
+		curl_http 'none' '' GET "$url" "$downloadLocationFilePath"
+		local exitCode=$?
+		set -e
+		
+		if [ $exitCode -ne 0 ]; then
+			rm -rf "$downloadLocationFilePath"
+			core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download from '$url' using curl (curl exit code was '$exitCode')"
+		fi
+			
+		if [ $curl_httpStatusCode -ne 200 ]; then
+			rm -rf "$downloadLocationFilePath"
+			core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download from '$url' using curl (status code was '$curl_httpStatusCode')"
+		fi
+	else
+		
+		# Assumes a BusyBox wget (ie primitive)
+		
+		set +e
+		wget -q -O "$downloadLocationFilePath" -U "$curl_userAgent" "$url"
+		local exitCode=$?
+		set -e
+		
+		if [ $exitCode -ne 0 ]; then
+			rm -rf "$downloadLocationFilePath"
+			core_exitError $core_commandLine_exitCode_PROTOCOL "Could not download from '$url' using wget (wget exit code was '$exitCode')"
+		fi
+		
 	fi
 }

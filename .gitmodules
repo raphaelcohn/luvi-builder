@@ -13,3 +13,6 @@
 [submodule "lib/shellfire/urlencode"]
 	path = lib/shellfire/urlencode
 	url = https://github.com/shellfire-dev/urlencode.git
+[submodule "lib/tcc/tinycc"]
+	path = lib/tcc/tinycc
+	url = git://repo.or.cz/tinycc.git
