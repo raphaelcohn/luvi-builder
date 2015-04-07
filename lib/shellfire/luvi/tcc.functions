@@ -6,7 +6,7 @@ core_dependency_requires uname
 luvi_tcc_makeIfRequired()
 {
 	local _luvi_tcc_makeIfRequired_prefix="$_program_libPath"/tcc/built
-	local _luvi_tcc_makeIfRequired_sourcePath="$_program_libPath"/tcc/tinycc
+	local _luvi_tcc_makeIfRequired_sourcePath="$_program_libPath"/tcc/source
 	local _luvi_tcc_makeIfRequired_sysIncludesPath
 	local _luvi_tcc_makeIfRequired_libsPath
 	local _luvi_tcc_makeIfRequired_crtPrefix
@@ -36,6 +36,7 @@ luvi_tcc_makeIfRequired()
 	luvi_tcc_makeIfRequired_configure
 	luvi_tcc_makeIfRequired_make
 	luvi_tcc_makeIfRequired_clean
+	luvi_tcc_makeIfRequired_createMacOSXDylib
 }
 
 core_dependency_requires '*' rm mkdir
@@ -119,6 +120,14 @@ luvi_tcc_makeIfRequired_make()
 		fi
 	
 	popd
+}
+
+# core_dependency_requires Homebrew 
+luvi_tcc_makeIfRequired_createMacOSXDylib()
+{
+	if $_luvi_tcc_makeIfRequired_isMacOsX; then
+		gcc -dynamiclib -current_version 1.0 "$_luvi_tcc_makeIfRequired_prefix"/lib64/libtcc.a -o "$_luvi_tcc_makeIfRequired_prefix"/lib64/libtcc.dylib
+	fi
 }
 
 #core_dependency_requires Homebrew sw_vers xcodebuild
