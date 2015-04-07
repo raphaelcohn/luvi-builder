@@ -25,7 +25,7 @@
 * `i686` (Linux only)
 * `armv6l` (Linux only)
 * `armv7l` (Linux only)
-* `x86_64` (Darwin, Lunix only)
+* `x86_64` (Darwin, Linux only)
 * `amd64` (FreeBSD, Windows)
 
 
